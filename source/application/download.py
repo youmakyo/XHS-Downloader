@@ -39,6 +39,7 @@ class Download:
         "audio/mp4": "m4a",
         "audio/mpeg": "mp3",
     }
+    VIDEO_SUFFIXES = frozenset({"mp4", "mov", "m4v"})
 
     def __init__(
         self,
@@ -253,6 +254,7 @@ class Download:
                         }
                     )
 
+            content_type = ""
             try:
                 async with self.client.stream(
                     "GET",
@@ -265,6 +267,7 @@ class Download:
                             _("文件 {0} 缓存异常，重新下载").format(temp.name),
                         )
                     response.raise_for_status()
+                    content_type = response.headers.get("content-type", "") or ""
                     # self.__create_progress(
                     #     bar,
                     #     int(
@@ -291,6 +294,7 @@ class Download:
                     name,
                     # suffix,
                     format_,
+                    content_type,
                 )
                 self.manager.move(
                     temp,
@@ -374,12 +378,18 @@ class Download:
         path: Path,
         name: str,
         default_suffix: str,
+        content_type: str = "",
     ) -> Path:
+        """文件签名优先；视频以服务端 Content-Type 为准，与网页下载保持一致。"""
+
+        media_type = content_type.split(";", 1)[0].strip().lower()
         try:
             async with open(temp, "rb") as f:
                 file_start = await f.read(FILE_SIGNATURES_LENGTH)
             for offset, signature, suffix in FILE_SIGNATURES:
                 if file_start[offset : offset + len(signature)] == signature:
+                    if media_type.startswith("video/") and suffix in self.VIDEO_SUFFIXES:
+                        suffix = self.__extract_type(media_type) or suffix
                     return path.joinpath(f"{name}.{suffix}")
         except Exception as error:
             logging(
