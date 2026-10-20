@@ -13,6 +13,12 @@ __all__ = ["Html"]
 
 
 class Html:
+    MOBILE_USER_AGENT = (
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
+        "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 "
+        "Mobile/15E148 Safari/604.1"
+    )
+
     def __init__(
         self,
         manager: "Manager",
@@ -32,11 +38,14 @@ class Html:
         content=True,
         cookie: str | None = None,
         proxy: str | None = None,
+        mobile: bool = False,
         **kwargs,
     ) -> str:
         if not url.startswith("http"):
             url = f"https://{url}"
         headers = self.manager.get_headers(url)
+        if mobile:
+            headers["user-agent"] = self.MOBILE_USER_AGENT
         try:
             if cookie:
                 response = self.__request_url_with_cookie(

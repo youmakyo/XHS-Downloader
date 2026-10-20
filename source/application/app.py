@@ -452,12 +452,67 @@ class XHS:
             cookie=cookie,
             proxy=proxy,
         )
-        namespace = self.__generate_data_object(html)
-        if not namespace:
+        data = self.convert.run(html)
+        if not data:
             self.logging(_("{0} 获取数据失败").format(id_), ERROR)
             count.fail += 1
             return {}
-        return namespace
+        await self.__fill_origin_video_key(data, url, cookie, proxy)
+        return Namespace(data)
+
+    ORIGIN_VIDEO_KEY = (
+        "video",
+        "consumer",
+        "originVideoKey",
+    )
+
+    async def __fill_origin_video_key(
+        self,
+        data: dict,
+        url: str,
+        cookie: str | None = None,
+        proxy: str | None = None,
+    ) -> None:
+        """桌面端页面已不再返回视频原文件字段，改用移动端页面补全。"""
+
+        if data.get("type") != "video":
+            return
+        if Converter.deep_get(data, self.ORIGIN_VIDEO_KEY):
+            return
+        key = await self.__get_origin_video_key(url, cookie, proxy)
+        if not key:
+            return
+        video = data.get("video")
+        if not isinstance(video, dict):
+            return
+        consumer = video.get("consumer")
+        if not isinstance(consumer, dict):
+            consumer = video["consumer"] = {}
+        consumer["originVideoKey"] = key
+        self.logging(_("已获取视频原文件：{0}").format(key))
+
+    async def __get_origin_video_key(
+        self,
+        url: str,
+        cookie: str | None = None,
+        proxy: str | None = None,
+    ) -> str:
+        if not (cookie or self.html.client.cookies):
+            # 未设置 Cookie 时移动端页面不会返回视频原文件
+            return ""
+        html = await self.html.request_url(
+            url,
+            cookie=cookie,
+            proxy=proxy,
+            mobile=True,
+        )
+        if not html:
+            return ""
+        try:
+            data = self.convert.run(html)
+        except Exception:
+            return ""
+        return Converter.deep_get(data, self.ORIGIN_VIDEO_KEY) or ""
 
     async def _check_existing_record(
         self,
@@ -650,10 +705,6 @@ class XHS:
 
         link = urlparse(url)
         return link.path.rstrip("/").split("/")[-1]
-
-    def __generate_data_object(self, html: str) -> Namespace:
-        data = self.convert.run(html)
-        return Namespace(data)
 
     def __naming_rules(self, data: dict) -> str:
         keys = self.manager.name_format.split()

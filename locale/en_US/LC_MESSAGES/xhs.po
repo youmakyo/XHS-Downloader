@@ -50,6 +50,11 @@ msgstr "Start processing note: {0}"
 msgid "{0} 获取数据失败"
 msgstr "{0} failed to retrieve data"
 
+#: source/application/app.py
+#, python-brace-format
+msgid "已获取视频原文件：{0}"
+msgstr "Retrieved the original video file: {0}"
+
 #: C:\Users\You\PycharmProjects\XHS-Downloader\source\application\app.py:471
 #, python-brace-format
 msgid "作品 {0} 存在下载记录，跳过处理"
