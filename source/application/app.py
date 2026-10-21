@@ -815,6 +815,7 @@ class XHS:
 
     async def close(self):
         await self.stop_script_server()
+        await self.html.close()
         await self.manager.close()
 
     # @staticmethod

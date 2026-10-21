@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING
 
-from curl_cffi.requests import get
+from curl_cffi.requests import AsyncSession, get
 from curl_cffi.requests.exceptions import RequestException
 
 from ..module import ERROR, logging, retry, sleep_time
@@ -18,6 +18,10 @@ class Html:
         "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 "
         "Mobile/15E148 Safari/604.1"
     )
+    MOBILE_IMPERSONATE = "safari180_ios"
+    MOBILE_ACCEPT = (
+        "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+    )
 
     def __init__(
         self,
@@ -30,6 +34,7 @@ class Html:
         self.timeout = manager.timeout
         self.proxy = manager.proxy
         self.impersonate = manager.impersonate
+        self.mobile_client: AsyncSession | None = None
 
     @retry
     async def request_url(
@@ -44,8 +49,13 @@ class Html:
         if not url.startswith("http"):
             url = f"https://{url}"
         headers = self.manager.get_headers(url)
+        impersonate = self.impersonate
         if mobile:
+            # 移动端页面对 UA、Accept 与 TLS 指纹的一致性校验严格，
+            # 任一不匹配都会返回风控拦截页
             headers["user-agent"] = self.MOBILE_USER_AGENT
+            headers["accept"] = self.MOBILE_ACCEPT
+            impersonate = self.MOBILE_IMPERSONATE
         try:
             if cookie:
                 response = self.__request_url_with_cookie(
@@ -53,6 +63,7 @@ class Html:
                     headers,
                     cookie,
                     proxy=proxy,
+                    impersonate=impersonate,
                     **kwargs,
                 )
             else:
@@ -60,6 +71,7 @@ class Html:
                     url,
                     headers,
                     proxy=proxy,
+                    mobile=mobile,
                     **kwargs,
                 )
             await sleep_time()
@@ -83,6 +95,7 @@ class Html:
             headers: dict,
             cookie: str,
             proxy: str | None = None,
+            impersonate: str | None = None,
             **kwargs,
     ):
         return get(
@@ -93,7 +106,7 @@ class Html:
             verify=False,
             allow_redirects=True,
             proxy=self.proxy if proxy is None else proxy,
-            impersonate=self.impersonate,
+            impersonate=impersonate or self.impersonate,
             **kwargs,
         )
 
@@ -102,11 +115,33 @@ class Html:
         url: str,
         headers: dict,
         proxy: str | None = None,
+        mobile: bool = False,
         **kwargs,
     ):
-        return await self.client.get(
+        client = self.__get_mobile_client() if mobile else self.client
+        return await client.get(
             url,
             headers=headers,
             proxy=self.proxy if proxy is None else proxy,
             **kwargs,
         )
+
+    def __get_mobile_client(self) -> AsyncSession:
+        """移动端页面要求 UA 与 TLS 指纹匹配，否则只会返回风控拦截页。"""
+
+        if self.mobile_client is None:
+            self.mobile_client = AsyncSession(
+                headers=self.manager.blank_headers,
+                cookies=self.client.cookies,
+                timeout=self.timeout,
+                verify=False,
+                allow_redirects=True,
+                proxy=self.proxy,
+                impersonate=self.MOBILE_IMPERSONATE,
+            )
+        return self.mobile_client
+
+    async def close(self) -> None:
+        if self.mobile_client is not None:
+            await self.mobile_client.close()
+            self.mobile_client = None
