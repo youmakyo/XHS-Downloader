@@ -7,12 +7,12 @@ from curl_cffi.requests.exceptions import RequestException
 
 from ..expansion import CacheError
 
-# from ..module import WARNING
 from ..module import (
     ERROR,
     FILE_SIGNATURES,
     FILE_SIGNATURES_LENGTH,
     MAX_WORKERS,
+    WARNING,
     logging,
     # sleep_time,
 )
@@ -84,13 +84,14 @@ class Download:
         progress: Callable[[dict], None] | None = None,
         task_id: str | None = None,
     ) -> list[Any]:
+        covers = []
         if type_ == _("视频"):
             tasks = self.__ready_download_video(
                 urls,
                 path,
                 filename,
             )
-            tasks += self.__ready_download_cover(
+            covers = self.__ready_download_cover(
                 cover,
                 path,
                 filename,
@@ -121,6 +122,15 @@ class Download:
             for url, name, format_ in tasks
         ]
         tasks = await gather(*tasks)
+        if covers:
+            # 视频封面属于附加文件，下载失败不应影响作品本身的处理结果
+            await self.__download_covers(
+                covers,
+                path,
+                mtime,
+                progress,
+                task_id,
+            )
         return tasks
 
     def generate_path(self, nickname: str, filename: str):
@@ -166,6 +176,33 @@ class Download:
         ):
             return [(url, name, self.image_format)]
         return []
+
+    async def __download_covers(
+        self,
+        covers: list,
+        path: Path,
+        mtime: int,
+        progress: Callable[[dict], None] | None,
+        task_id: str | None,
+    ) -> None:
+        """依次下载视频封面，失败仅记录警告，不计入作品处理结果。"""
+
+        for url, name, format_ in covers:
+            if await self.__download(
+                url,
+                path,
+                name,
+                format_,
+                mtime,
+                progress,
+                task_id,
+            ):
+                continue
+            logging(
+                self.print,
+                _("视频封面 {0} 下载失败，已跳过：{1}").format(name, url),
+                WARNING,
+            )
 
     def __ready_download_image(
         self,
@@ -242,12 +279,15 @@ class Download:
                 temp,
             )
 
+            # 图片格式为 auto 时无法预知真实后缀，避免在进度中显示无意义的后缀
+            display = name if format_ == "auto" else f"{name}.{format_}"
+
             def report(state: str, total: int | None = None) -> None:
                 if progress:
                     progress(
                         {
                             "task_id": task_id,
-                            "filename": f"{name}.{format_}",
+                            "filename": display,
                             "completed_bytes": completed,
                             "total_bytes": total,
                             "state": state,

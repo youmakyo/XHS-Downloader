@@ -55,6 +55,11 @@ msgstr ""
 msgid "已获取视频原文件：{0}"
 msgstr ""
 
+#: source/application/download.py
+#, python-brace-format
+msgid "视频封面 {0} 下载失败，已跳过：{1}"
+msgstr ""
+
 #: C:\Users\You\PycharmProjects\XHS-Downloader\source\application\app.py:471
 #, python-brace-format
 msgid "作品 {0} 存在下载记录，跳过处理"

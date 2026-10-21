@@ -55,6 +55,11 @@ msgstr "{0} failed to retrieve data"
 msgid "已获取视频原文件：{0}"
 msgstr "Retrieved the original video file: {0}"
 
+#: source/application/download.py
+#, python-brace-format
+msgid "视频封面 {0} 下载失败，已跳过：{1}"
+msgstr "Failed to download the video cover {0}, skipped: {1}"
+
 #: C:\Users\You\PycharmProjects\XHS-Downloader\source\application\app.py:471
 #, python-brace-format
 msgid "作品 {0} 存在下载记录，跳过处理"
